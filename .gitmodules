@@ -1,0 +1,3 @@
+[submodule "inst/barque"]
+	path = inst/barque
+	url = https://github.com/enormandeau/barque.git
