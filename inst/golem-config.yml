@@ -1,11 +1,12 @@
 default:
-  golem_name: barque
+  golem_name: barqueShinyApp
   golem_version: 0.0.0.9000
   app_prod: no
-
+  bq_results_dir: inst/barque/12_results
+  bq_seqs_dir: inst/barque/04_data
+  bq_primer_file: inst/barque/02_info/primers.csv
+  bq_config_file: inst/barque/02_info/barque_config.sh
 production:
   app_prod: yes
-
 dev:
   golem_wd: !expr golem::pkg_path()
-
