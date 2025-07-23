@@ -40,18 +40,28 @@ RUN wget https://github.com/torognes/vsearch/releases/download/v2.30.0/vsearch-2
 
 # Install R packages (no version pinning)
 RUN install2.r --error \
+    bslib \
+    cli \
+    config \
+    desc \
+    fontawesome \
+    glue \
+    golem \
+    httpuv \
+    pkgload \
+    reactable \
     shiny \
-    shinydashboard \
-    DT \
-    dplyr \
-    readr \
-    remotes
+    shinyWidgets \
+    usethis
 
 # Install Python dependencies
 RUN pip3 install --break-system-packages --no-cache-dir biopython pandas numpy
 
+# Remove demo apps
+RUN rm -rf /srv/shiny-server/*
+
 # Copy your app
-COPY . /srv/shiny-server/barque-app
+COPY . /srv/shiny-server
 
 # Set permissions for Shiny
 RUN chown -R shiny:shiny /srv/shiny-server

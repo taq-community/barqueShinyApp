@@ -1,7 +1,7 @@
 app_ui <- function(request) {
   tagList(
     bslib::page_navbar(
-      theme = bslib::bs_theme(bootswatch = "flatly", version = 5),
+      theme = bslib::bs_theme(bootswatch = "zephyr", version = 5),
       title = tagList(
         img(
           src = "https://raw.githubusercontent.com/enormandeau/barque/master/00_archive/barque_small.png",
