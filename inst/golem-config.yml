@@ -6,6 +6,7 @@ default:
   bq_seqs_dir: inst/barque/04_data
   bq_primer_file: inst/barque/02_info/primers.csv
   bq_config_file: inst/barque/02_info/barque_config.sh
+  bq_ncpus: 20
 production:
   app_prod: yes
 dev:
