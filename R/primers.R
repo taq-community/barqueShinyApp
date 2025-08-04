@@ -75,5 +75,35 @@ get_primer_names <- function(input_file = get_golem_config("bq_primer_file")) {
   return(primer_names[-1])
 }
 
+#' Read primer from CSV
+#'
+#' @param file Character. Path to the CSV file containing primer definitions, with rows
+#' prefixed by `#`.
+#'
+#' @return A data frame with all primer properties.
+#'
+#'
+#' @examples
+#' \dontrun{
+#' primers <- read_primer("primers.csv")
+#' print(primers)
+#' }
+#'
+#' @export
+read_primers <- function(file = get_golem_config("bq_primer_file")) {
+  # Lire toutes les lignes du fichier
+  lines <- readLines(file, warn = FALSE)
+  
+  # Retirer le caractère '#' s'il est le premier caractère de la ligne
+  lines <- gsub("^#", "", lines)
+  
+  # Lire le contenu nettoyé comme un CSV en mémoire
+  con <- textConnection(lines)
+  df <- read.csv(con, stringsAsFactors = FALSE)
+  close(con)
+  
+  return(df)
+}
+
 
 
