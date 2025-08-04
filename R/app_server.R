@@ -9,241 +9,278 @@ app_server <- function(input, output, session) {
   # Initialize cli logging
   cli::cli_h1("BARQUE Shiny Application")
   cli::cli_alert_info("Server initialized at {Sys.time()}")
-  
+
+  # Set 100 Mo per file upload limit
+  options(shiny.maxRequestSize = 100 * 1024^2)
+  options(shiny.reactlog = TRUE)
+
+  folder_path <- get_golem_config("bq_seqs_dir")
+
+  update_file_list <- function() {
+    if (dir.exists(folder_path)) {
+      values$file_list <- list.files(folder_path, full.names = TRUE)
+    } else {
+      values$file_list <- character(0)
+    }
+  }
+
   # Reactive values for storing data
-  values <- reactiveValues(
-    script_output = "",
-    config_message = ""
-  )
-  
-  # File list in sidebar
+  values <- reactiveValues(proc = NULL, log_timer = NULL, script_output = "", file_list = list.files(folder_path, full.names = TRUE), file_buttons = list())
+
+  # File list
   output$file_list <- reactable::renderReactable({
-    # Trigger refresh when button is clicked or files are uploaded
-    input$refresh_folder
-    input$upload_files
-    
-    cli::cli_alert_info("File list refresh triggered")
-    
-    tryCatch({
-      folder_path <- get_golem_config("bq_seqs_dir")  # Use current working directory
-      cli::cli_alert_info("Reading folder: {.path {folder_path}}")
-      
-      if (dir.exists(folder_path)) {
-        files <- list.files(folder_path, full.names = FALSE, all.files = TRUE, no.. = TRUE, include.dirs = FALSE, pattern = "*.fastq.gz")
-        cli::cli_alert_success("Found {.strong {length(files)}} files in folder")
-        
-        if (length(files) > 0) {
-          # Create a data frame with file information
-          file_info <- data.frame(
-            Files = files,
-            stringsAsFactors = FALSE
-          )
-          
-          # Add file size in MB and modification date
-          file_details <- file.info(file.path(folder_path, files))
-          file_info$Size <- paste0(round(file_details$size / (1024^2), 2), " MB")
-          file_info$Modified <- format(file_details$mtime, "%Y-%m-%d %H:%M")
-          
-          cli::cli_alert_success("File information successfully processed for reactable")
-          
-          reactable::reactable(
-            file_info,
-            compact = TRUE,
-            fullWidth = TRUE,
-            showPageInfo = FALSE,
-            searchable = TRUE,
-            showPageSizeOptions = FALSE,
-            defaultPageSize = 100,
-            columns = list(
-              Files = reactable::colDef(
-                name = "Files",
-                minWidth = 120,
-              ),
-              Size = reactable::colDef(
-                name = "Size (MB)",
-                width = 120,
-                align = "right"
-              ),
-              Modified = reactable::colDef( 
-                name = "Last Modified",
-                width = 150,
-                align = "right"
-              )
-            ),
-            theme = reactable::reactableTheme(
-              style = list(fontSize = "14px")
-            )
-          )
-        } else {
-          cli::cli_alert_warning("Folder is empty")
-          # Return empty reactable with message
-          empty_df <- data.frame(Message = "Folder is empty", stringsAsFactors = FALSE)
-          reactable::reactable(
-            empty_df,
-            compact = TRUE,
-            fullWidth = TRUE,
-            showPageInfo = FALSE,
-            searchable = TRUE,
-            showPageSizeOptions = FALSE,
-            columns = list(
-              Message = reactable::colDef(
-                name = "",
-                style = list(textAlign = "center", fontStyle = "italic", color = "#666")
-              )
-            )
-          )
-        }
-      } else {
-        cli::cli_alert_danger("Folder does not exist: {.path {folder_path}}")
-        # Return empty reactable with error message
-        error_df <- data.frame(Message = "Folder does not exist", stringsAsFactors = FALSE)
-        reactable::reactable(
-          error_df,
-          compact = TRUE,
-          fullWidth = TRUE,
-          showPageInfo = FALSE,
-          searchable = TRUE,
-          showPageSizeOptions = FALSE,
-          columns = list(
-            Message = reactable::colDef(
-              name = "",
-              style = list(textAlign = "center", fontStyle = "italic", color = "#d32f2f")
-            )
-          )
-        )
-      }
-    }, error = function(e) {
-      cli::cli_alert_danger("Error reading folder: {.strong {e$message}}")
-      # Return empty reactable with error message
-      error_df <- data.frame(Message = paste("Error reading folder:", e$message), stringsAsFactors = FALSE)
-      reactable::reactable(
-        error_df,
-        compact = TRUE,
-        fullWidth = TRUE,
-        showPageInfo = FALSE,
-        searchable = TRUE,
-        showPageSizeOptions = FALSE,
-        columns = list(
-          Message = reactable::colDef(
-            name = "",
-            style = list(textAlign = "center", fontStyle = "italic", color = "#d32f2f")
-          )
-        )
+
+    if (length(values$file_list) == 0) {
+      return(reactable::reactable(data.frame(Message = "Folder is empty")))
+    }
+
+    file_df <- data.frame(
+      Filename = basename(values$file_list),
+      Size = paste0(round(file.info(values$file_list)$size / 1024^2, 2), " MB"),
+      Modified = format(file.info(values$file_list)$mtime, "%Y-%m-%d %H:%M"),
+      FullPath = values$file_list,
+      stringsAsFactors = FALSE
+    )
+
+    # Stocke les noms des fichiers (utilisé par observe)
+    values$file_buttons <- setNames(file_df$FullPath, paste0("delete_", seq_along(values$file_list)))
+
+    reactable::reactable(
+      file_df,
+      compact = TRUE,
+      fullWidth = TRUE,
+      defaultPageSize = 50,
+      columns = list(
+        Filename = reactable::colDef(name = "Filename", searchable = TRUE),
+        Size     = reactable::colDef(name = "Size", align = "right", width = 100),
+        Modified = reactable::colDef(name = "Modified", align = "right", width = 160),
+        FullPath   = reactable::colDef(name = "", align = "center", width = 70, html = TRUE,
+        cell = function(value, index) {
+            id <- paste0("delete_", index)
+            as.character(tags$button(
+              onclick = sprintf("Shiny.setInputValue('delete_trigger', '%s', {priority: 'event'})", id),
+              class = "btn btn-sm btn-danger",
+              fontawesome::fa("trash")
+            ))
+        })
       )
+    )
+  })
+
+  # Bouton dynamique selon l'état
+  output$script_control_button <- renderUI({
+    if (!is.null(values$proc) && values$proc$is_alive()) {
+      actionButton("cancel_script", div(fontawesome::fa("ban"), "Cancel run"), class = "btn-danger", style = "width: 100%;")
+    } else {
+      actionButton("execute_script", div(fontawesome::fa("play"), "Run pipeline"),, class = "btn-success", style = "width: 100%;")
+    }
+  })
+  
+  # Execute script
+  observeEvent(input$execute_script, {
+    cli::cli_process_start("Launching script asynchronously...")
+    shinyjs::disable("execute_script")
+
+    values$proc <- processx::process$new(
+      command = "./barque",
+      args = c("02_info/barque_config.sh"),
+      wd = "inst/barque",
+      stdout = "|",  # pipe la sortie
+      stderr = "2>&1"
+    )
+
+    # Timer pour lire la sortie toutes les secondes
+    values$log_timer <- reactiveTimer(1000)
+  })
+
+  # Interruption du processus
+  observeEvent(input$cancel_script, {
+    if (!is.null(values$proc) && values$proc$is_alive()) {
+      values$proc$kill()
+      values$log_output <- c(values$log_output, "\n\n⛔ Pipeline annulé par l'utilisateur.")
+      cli::cli_alert_danger("Pipeline interrompu.")
+      values$proc <- NULL
+    }
+  })
+
+  # Lire et accumuler la sortie
+  observe({
+    req(values$proc)
+    req(values$log_timer)
+    values$log_timer()
+
+    if (values$proc$is_alive()) {
+      new_lines <- values$proc$read_output_lines()
+      if (length(new_lines) > 0) {
+        values$log_output <- c(values$log_output, new_lines)
+      }
+    } else {
+      new_lines <- values$proc$read_all_output_lines()
+      values$log_output <- c(values$log_output, new_lines)
+
+      cli::cli_process_done()
+      shinyjs::enable("execute_script")
+      values$proc <- NULL
+    }
+  })
+
+  # Affichage de tout le log
+  output$log_output <- renderText({
+    isolate({
+      session$sendCustomMessage("scrollLogToBottom", "log_output")
     })
+    paste(values$log_output, collapse = "\n")
   })
   
-  # Display script output
-  output$script_output <- renderText({
-    values$script_output
-  })
-  
-  # Placeholder for execute script button
-  observeEvent(input$execute_script, {
-    cli::cli_alert_info("Execute script button clicked")
-    cli::cli_process_start("Starting script execution...")
-    values$script_output <- "Execute script functionality - placeholder for future implementation"
-    cli::cli_process_done()
-  })
-
-  observeEvent(input$execute_script, {
-    system("cd inst/barque && ./barque 02_info/barque_config.sh", wait = TRUE)
-  })
-  
-
   observeEvent(input$save_config, {
     cli::cli_h2("Configuration Save")
     cli::cli_alert_info("Save configuration button clicked")
-    
-    tryCatch({
-      # Log configuration values being saved
-      cli::cli_alert_info("Saving configuration parameters:")
-      cli::cli_ul(c(
-        "NCPUS: {.val {input$NCPUS}}",
-        "PRIMER_FILE: {.file {input$PRIMER_SELECTED}}",
-        "SKIP_DATA_PREP: {.val {input$SKIP_DATA_PREP}}",
-        "CROP_LENGTH: {.val {input$CROP_LENGTH}}",
-        "MIN_OVERLAP: {.val {input$MIN_OVERLAP}}",
-        "MAX_OVERLAP: {.val {input$MAX_OVERLAP}}",
-        "MAX_PRIMER_DIFF: {.val {input$MAX_PRIMER_DIFF}}",
-        "SKIP_CHIMERA_DETECTION: {.val {input$SKIP_CHIMERA_DETECTION}}",
-        "MAX_ACCEPTS: {.val {input$MAX_ACCEPTS}}",
-        "MAX_REJECTS: {.val {input$MAX_REJECTS}}",
-        "QUERY_COV: {.val {input$QUERY_COV}}",
-        "MIN_HIT_LENGTH: {.val {input$MIN_HIT_LENGTH}}",
-        "MIN_HITS_SAMPLE: {.val {input$MIN_HITS_SAMPLE}}",
-        "MIN_HITS_EXPERIMENT: {.val {input$MIN_HITS_EXPERIMENT}}",
-        "NUM_NON_ANNOTATED_SEQ: {.val {input$NUM_NON_ANNOTATED_SEQ}}",
-        "MIN_DEPTH_MULTI: {.val {input$MIN_DEPTH_MULTI}}",
-        "SKIP_OTUS: {.val {input$SKIP_OTUS}}",
-        "MIN_SIZE_FOR_OTU: {.val {input$MIN_SIZE_FOR_OTU}}"
-      ))
 
-      write_barque_config(
-        file = get_golem_config("bq_config_file"),
-        NCPUS = input$NCPUS,
-        PRIMER_FILE = get_golem_config("bq_primer_file"),
-        SKIP_DATA_PREP = input$SKIP_DATA_PREP,
-        CROP_LENGTH = input$CROP_LENGTH,
-        MIN_OVERLAP = input$MIN_OVERLAP,
-        MAX_OVERLAP = input$MAX_OVERLAP,
-        MAX_PRIMER_DIFF = input$MAX_PRIMER_DIFF,
-        SKIP_CHIMERA_DETECTION = input$SKIP_CHIMERA_DETECTION,
-        MAX_ACCEPTS = input$MAX_ACCEPTS,
-        MAX_REJECTS = input$MAX_REJECTS,
-        QUERY_COV = input$QUERY_COV,
-        MIN_HIT_LENGTH = input$MIN_HIT_LENGTH,
-        MIN_HITS_SAMPLE = input$MIN_HITS_SAMPLE,
-        MIN_HITS_EXPERIMENT = input$MIN_HITS_EXPERIMENT,
-        NUM_NON_ANNOTATED_SEQ = input$NUM_NON_ANNOTATED_SEQ,
-        MIN_DEPTH_MULTI = input$MIN_DEPTH_MULTI,
-        SKIP_OTUS = input$SKIP_OTUS,
-        MIN_SIZE_FOR_OTU = input$MIN_SIZE_FOR_OTU
-      )
+    tryCatch(
+      {
+        # Log configuration values being saved
+        cli::cli_alert_info("Saving configuration parameters:")
+        cli::cli_ul(c(
+          "NCPUS: {.val {input$NCPUS}}",
+          "PRIMER_FILE: {.file {input$PRIMER_SELECTED}}",
+          "SKIP_DATA_PREP: {.val {input$SKIP_DATA_PREP}}",
+          "CROP_LENGTH: {.val {input$CROP_LENGTH}}",
+          "MIN_OVERLAP: {.val {input$MIN_OVERLAP}}",
+          "MAX_OVERLAP: {.val {input$MAX_OVERLAP}}",
+          "MAX_PRIMER_DIFF: {.val {input$MAX_PRIMER_DIFF}}",
+          "SKIP_CHIMERA_DETECTION: {.val {input$SKIP_CHIMERA_DETECTION}}",
+          "MAX_ACCEPTS: {.val {input$MAX_ACCEPTS}}",
+          "MAX_REJECTS: {.val {input$MAX_REJECTS}}",
+          "QUERY_COV: {.val {input$QUERY_COV}}",
+          "MIN_HIT_LENGTH: {.val {input$MIN_HIT_LENGTH}}",
+          "MIN_HITS_SAMPLE: {.val {input$MIN_HITS_SAMPLE}}",
+          "MIN_HITS_EXPERIMENT: {.val {input$MIN_HITS_EXPERIMENT}}",
+          "NUM_NON_ANNOTATED_SEQ: {.val {input$NUM_NON_ANNOTATED_SEQ}}",
+          "MIN_DEPTH_MULTI: {.val {input$MIN_DEPTH_MULTI}}",
+          "SKIP_OTUS: {.val {input$SKIP_OTUS}}",
+          "MIN_SIZE_FOR_OTU: {.val {input$MIN_SIZE_FOR_OTU}}"
+        ))
 
-      write_selected_primer_csv(primer_to_activate = input$PRIMER_SELECTED)
+        write_barque_config(
+          file = get_golem_config("bq_config_file"),
+          NCPUS = input$NCPUS,
+          PRIMER_FILE = stringr::str_replace(get_golem_config("bq_primer_file"), "inst/barque/", ""),
+          SKIP_DATA_PREP = input$SKIP_DATA_PREP,
+          CROP_LENGTH = input$CROP_LENGTH,
+          MIN_OVERLAP = input$MIN_OVERLAP,
+          MAX_OVERLAP = input$MAX_OVERLAP,
+          MAX_PRIMER_DIFF = input$MAX_PRIMER_DIFF,
+          SKIP_CHIMERA_DETECTION = input$SKIP_CHIMERA_DETECTION,
+          MAX_ACCEPTS = input$MAX_ACCEPTS,
+          MAX_REJECTS = input$MAX_REJECTS,
+          QUERY_COV = input$QUERY_COV,
+          MIN_HIT_LENGTH = input$MIN_HIT_LENGTH,
+          MIN_HITS_SAMPLE = input$MIN_HITS_SAMPLE,
+          MIN_HITS_EXPERIMENT = input$MIN_HITS_EXPERIMENT,
+          NUM_NON_ANNOTATED_SEQ = input$NUM_NON_ANNOTATED_SEQ,
+          MIN_DEPTH_MULTI = input$MIN_DEPTH_MULTI,
+          SKIP_OTUS = input$SKIP_OTUS,
+          MIN_SIZE_FOR_OTU = input$MIN_SIZE_FOR_OTU
+        )
 
-      cli::cli_alert_success("Configuration successfully saved")
+        write_selected_primer_csv(
+          input_file = get_golem_config("bq_primer_file"), 
+          output_file = get_golem_config("bq_primer_file"), 
+          primer_to_activate = input$PRIMER_SELECTED
+        )
 
-      shinyWidgets::show_toast(
-        title = "Success!",
-        text = "Configuration saved! Ready for BARQUE.",
-        type = "success",
-        position = "center",
-        timer = 3000
-      )
+        cli::cli_alert_success("Configuration successfully saved")
 
-    }, error = function(e) {
-      cli::cli_alert_danger("Error saving configuration: {.strong {e$message}}")
+        shinyWidgets::show_toast(
+          title = "Success!",
+          text = "Configuration saved! Ready for BARQUE.",
+          type = "success",
+          position = "center",
+          timer = 3000
+        )
+      },
+      error = function(e) {
+        cli::cli_alert_danger("Error saving configuration: {.strong {e$message}}")
 
-      shinyWidgets::show_toast(
-        title = "Error",
-        text = paste("Error saving configuration:", e$message),
-        type = "error",
-        position = "center",
-        timer = 7000
-      )
-    })
+        shinyWidgets::show_toast(
+          title = "Error",
+          text = paste("Error saving configuration:", e$message),
+          type = "error",
+          position = "center",
+          timer = 7000
+        )
+      }
+    )
+  })
+  
+  # Clear data folder
+  observeEvent(input$clear_data_folder, {
+    shinyWidgets::confirmSweetAlert(
+      session = session,
+      inputId = "confirm_clear",
+      title = "Are you sure?",
+      text = "This will delete all files in the folder.",
+      type = "warning"
+    )
+  })
+
+  # Handle confirmation for clearing data folder
+  observeEvent(input$confirm_clear, {
+    if (isTRUE(input$confirm_clear)) {
+      files <- list.files(folder_path, full.names = TRUE)
+      file.remove(files)
+      update_file_list()
+      shinyWidgets::show_toast(title = "Success!", text = "All files removed from data folder", type = "success", position = "center", timer = 3000)
+    }
   })
 
   # Log file uploads
   observeEvent(input$upload_files, {
-    if (!is.null(input$upload_files)) {
-      cli::cli_h3("File Upload")
-      cli::cli_alert_info("Files uploaded: {.strong {nrow(input$upload_files)}} files")
-      
-      for (i in 1:nrow(input$upload_files)) {
-        size_mb <- round(input$upload_files$size[i] / (1024^2), 2)
-        cli::cli_li("File: {.file {input$upload_files$name[i]}} ({.val {size_mb}} MB)")
-      }
+    for (i in seq_len(nrow(input$upload_files))) {
+      file.copy(
+        from = input$upload_files$datapath[i],
+        to = file.path(folder_path, input$upload_files$name[i]),
+        overwrite = TRUE
+      )
+    }
+
+    cli::cli_alert_success("Uploaded {nrow(input$upload_files)} files to {.path {folder_path}}")
+    print(values$file_buttons)
+    update_file_list()
+  })
+
+  observeEvent(input$delete_trigger, {
+    id <- input$delete_trigger
+    path <- values$file_buttons[[id]]
+    if (file.exists(path)) {
+      file.remove(path)
+      cli::cli_alert_success("Deleted file {.file {basename(path)}}")
+      update_file_list()
     }
   })
-  
-  # Log refresh button clicks
-  observeEvent(input$refresh_folder, {
-    cli::cli_alert_info("Refresh folder button clicked")
-  })
-  
+
+  output$primer_info <- renderTable({
+    req(input$PRIMER_SELECTED)
+
+    primer_path <- get_golem_config("bq_primer_file")
+    primers <- read_primers(primer_path)
+
+    selected <- primers[primers$PrimerName == input$PRIMER_SELECTED, ]
+
+    if (nrow(selected) == 0) return(data.frame(Property = "Error", Value = "Selected primer not found."))
+
+    data.frame(
+      Property = c("Forward", "Reverse", "Amplicon Size", "Database"),
+      Value = c(
+        selected$ForwardSeq,
+        selected$ReverseSeq,
+        paste0(selected$MinAmpliconSize, "–", selected$MaxAmpliconSize),
+        selected$DatabaseName
+      ),
+      stringsAsFactors = FALSE
+    )
+  }, striped = FALSE, bordered = FALSE, spacing = "xs")
+
   # Log app shutdown
   session$onSessionEnded(function() {
     cli::cli_alert_info("BARQUE Shiny app session ended at {Sys.time()}")

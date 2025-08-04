@@ -1,7 +1,5 @@
 FROM rocker/shiny:latest
 
-ENV DEBIAN_FRONTEND=noninteractive
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
@@ -49,9 +47,12 @@ RUN install2.r --error \
     golem \
     httpuv \
     pkgload \
+    processx \
     reactable \
     shiny \
+    shinyjs \
     shinyWidgets \
+    stringr \
     usethis
 
 # Install Python dependencies
@@ -61,13 +62,9 @@ RUN pip3 install --break-system-packages --no-cache-dir biopython pandas numpy
 RUN rm -rf /srv/shiny-server/*
 
 # Copy your app
-COPY . /srv/shiny-server
+COPY --chown=shiny:shiny . /srv/shiny-server
 
-# Set permissions for Shiny
-RUN chown -R shiny:shiny /srv/shiny-server
-
-# Expose Shiny Server port
-EXPOSE 3838
+RUN mkdir -p /srv/shiny-server/app_cache/sass
 
 # Start Shiny Server
-CMD ["/usr/bin/shiny-server"]
+CMD ["/bin/shiny-server"]

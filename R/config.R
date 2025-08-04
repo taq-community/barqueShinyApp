@@ -32,7 +32,7 @@
 #' @export
 write_barque_config <- function(
   file = get_golem_config("bq_config_file"),
-  NCPUS = 20,
+  NCPUS = get_golem_config("bq_ncpus"),
   PRIMER_FILE = get_golem_config("bq_primer_file"),
   SKIP_DATA_PREP = 0,
   CROP_LENGTH = 200,

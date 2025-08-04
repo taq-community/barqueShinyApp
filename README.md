@@ -1,80 +1,84 @@
+# barqueShinyApp
 
-<!-- README.md is generated from README.Rmd. Please edit that file -->
+> A containerized Shiny app interface for BARQUE, the reproducible eDNA analysis pipeline.
 
-# `{barqueShinyApp}`
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
 
-<!-- badges: start -->
+---
 
-[![Lifecycle:
-experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
-<!-- badges: end -->
+## 🐳 Why Run in a Container?
 
-## Installation
+This application is designed to run inside a Docker container that includes **all dependencies required by BARQUE**, including:
 
-You can install the development version of `{barqueShinyApp}` like so:
+- FLASH (v2.2.00)
+- VSEARCH (v2.30.0)
+- GNU Parallel
+- etc. 
 
-``` r
-# FILL THIS IN! HOW CAN PEOPLE INSTALL YOUR DEV PACKAGE?
+See the BARQUE's documentation for the full list of dependencies.
+
+Here is the full list of R, Python, and system dependencies included in the Docker image:
+- R packages: shiny, shinydashboard, DT, dplyr, readr, remotes, pkgload, config, golem, shinyWidgets, bslib, reactable, cli, fontawesome, rsconnect, usethis, desc, httpuv
+- Python 3 + packages: biopython, pandas, numpy
+- System libraries: libcurl4-openssl-dev, libssl-dev, libxml2-dev, libgit2-dev, libglpk-dev, libharfbuzz-dev, libfribidi-dev, openjdk-11-jre-headless, build-essential, etc.
+
+This approach ensures:
+- 💡 Reproducibility: every user runs the exact same environment.
+- 💻 Simplicity: no R, Python, or system-level installations are needed locally.
+- 🔒 Isolation: the host system stays clean and untouched.
+
+---
+
+## 🚀 Running the App in Docker
+
+To build and run the app inside Docker:
+
+```bash
+git clone --recurse-submodules https://github.com/taq-community/barqueShinyApp.git
+cd barqueShinyApp
+docker build -t barque-app:dev .
+docker run -p 3838:3838 -v $(pwd):/srv/shiny-server -t barque-app:dev
+```
+Run the app inside the container:
+
+```bash
+
 ```
 
-## Run
+Then access the app in your browser at:
 
-You can launch the application by running:
+```
+http://localhost:3838
+```
 
-``` r
+This launches the full BARQUE environment with all the eDNA toolchain pre-installed.
+
+---
+
+## 💻 Development (Optional - Local R Session)
+
+If you want to develop or debug locally instead:
+
+```r
+# inside R
+golem::document_and_reload()
 barqueShinyApp::run_app()
 ```
 
-## About
+---
 
-You are reading the doc about version : 0.0.0.9000
+## 🧪 Test Results
 
-This README has been compiled on the
+This project uses:
+- `devtools::check()` for validation
+- `covr` + `covrpage` for test coverage
+- `testthat` for unit testing
 
-``` r
-Sys.time()
-#> [1] "2025-07-16 13:52:58 EDT"
-```
+See [dev/](dev/) for development scripts.
 
-Here are the tests results and package coverage:
+---
 
-``` r
-devtools::check(quiet = TRUE)
-#> ══ Documenting ═════════════════════════════════════════════════════════════════
-#> ℹ Installed roxygen2 version (7.3.2) doesn't match required (7.1.1)
-#> ✖ `check()` will not re-document this package
-#> ── R CMD check results ────────────────────────── barqueShinyApp 0.0.0.9000 ────
-#> Duration: 39.8s
-#> 
-#> ❯ checking dependencies in R code ... WARNING
-#>   '::' or ':::' imports not declared from:
-#>     ‘bslib’ ‘cli’ ‘fontawesome’ ‘reactable’
-#> 
-#> ❯ checking for hidden files and directories ... NOTE
-#>   Found the following hidden files and directories:
-#>     inst/barque/.git
-#>     inst/barque/11_non_annotated/.gitignored
-#>   These were most likely included in error. See section ‘Package
-#>   structure’ in the ‘Writing R Extensions’ manual.
-#> 
-#> ❯ checking installed package size ... NOTE
-#>     installed size is 1289.0Mb
-#>     sub-directories of 1Mb or more:
-#>       barque  1288.9Mb
-#> 
-#> ❯ checking top-level files ... NOTE
-#>   Non-standard files/directories found at top level:
-#>     ‘Dockerfile’ ‘dev’
-#> 
-#> ❯ checking package subdirectories ... NOTE
-#>   Problems with news in ‘NEWS.md’:
-#>   No news entries found.
-#> 
-#> 0 errors ✔ | 1 warning ✖ | 4 notes ✖
-#> Error: R CMD check found WARNINGs
-```
+## 📬 Maintainer
 
-``` r
-covr::package_coverage()
-#> Error in loadNamespace(x): there is no package called 'covr'
-```
+Steve Vissault — <steve.vissault@inrs.ca>  
+Developed for the TAQ initiative on environmental DNA in Québec.
