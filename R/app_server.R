@@ -75,6 +75,47 @@ app_server <- function(input, output, session) {
       actionButton("execute_script", div(fontawesome::fa("play"), "Run pipeline"),, class = "btn-success", style = "width: 100%;")
     }
   })
+
+  output$download_result_zip_ui <- renderUI({
+    results_dir <- "inst/barque/12_results"
+    has_results <- dir.exists(results_dir) && length(list.files(results_dir)) > 0
+    is_running <- !is.null(values$proc) && values$proc$is_alive()
+
+    disabled <- !has_results || is_running
+
+    downloadButton("download_result_zip", "Download latest results (.zip)",
+      class = if (disabled) "btn-secondary disabled" else "btn-success",
+      style = "width: 100%;",
+      disabled = disabled
+    )
+  })
+
+  output$download_result_zip <- downloadHandler(
+    filename = function() {
+      paste0("barque_results_", Sys.Date(), ".zip")
+    },
+    content = function(file) {
+      results_dir <- get_golem_config("bq_results_dir")
+      
+      # Temp zip file
+      tmp_zip <- tempfile(fileext = ".zip")
+      
+      # Compress all contents in 12_results/
+      old_wd <- setwd(results_dir)
+      on.exit(setwd(old_wd), add = TRUE)
+
+      zip::zip(zipfile = tmp_zip, files = list.files(".", recursive = TRUE))
+      
+      # Move zip to requested file location
+      file.copy(tmp_zip, file)
+
+      # ✅ Delete all files in 12_results
+      unlink(list.files(results_dir, full.names = TRUE), recursive = TRUE, force = TRUE)
+
+      cli::cli_alert_info("Results deleted after download.")
+    },
+    contentType = "application/zip"
+  )
   
   # Execute script
   observeEvent(input$execute_script, {
@@ -100,6 +141,7 @@ app_server <- function(input, output, session) {
       values$log_output <- c(values$log_output, "\n\n⛔ Pipeline annulé par l'utilisateur.")
       cli::cli_alert_danger("Pipeline interrompu.")
       values$proc <- NULL
+      
     }
   })
 
@@ -260,26 +302,37 @@ app_server <- function(input, output, session) {
   })
 
   output$primer_info <- renderTable({
-    req(input$PRIMER_SELECTED)
+      req(input$PRIMER_SELECTED)
 
-    primer_path <- get_golem_config("bq_primer_file")
-    primers <- read_primers(primer_path)
+      primer_path <- get_golem_config("bq_primer_file")
+      primers <- read_primers(primer_path)
 
-    selected <- primers[primers$PrimerName == input$PRIMER_SELECTED, ]
+      selected <- primers[primers$PrimerName == input$PRIMER_SELECTED, ]
 
-    if (nrow(selected) == 0) return(data.frame(Property = "Error", Value = "Selected primer not found."))
+      if (nrow(selected) == 0) {
+        return(data.frame(Property = "Error", Value = "Selected primer not found."))
+      }
 
-    data.frame(
-      Property = c("Forward", "Reverse", "Amplicon Size", "Database"),
-      Value = c(
-        selected$ForwardSeq,
-        selected$ReverseSeq,
-        paste0(selected$MinAmpliconSize, "–", selected$MaxAmpliconSize),
-        selected$DatabaseName
-      ),
-      stringsAsFactors = FALSE
-    )
-  }, striped = FALSE, bordered = FALSE, spacing = "xs")
+      data.frame(
+        Property = c("Forward", "Reverse", "Amplicon Size", "Database"),
+        Value = c(
+          selected$ForwardSeq,
+          selected$ReverseSeq,
+          paste0(selected$MinAmpliconSize, "–", selected$MaxAmpliconSize),
+          selected$DatabaseName
+        ),
+        stringsAsFactors = FALSE
+      )
+    },
+    striped = FALSE,
+    bordered = FALSE,
+    spacing = "xs"
+  )
+  
+  observeEvent(input$clear_log, {
+    values$log_output <- character(0)
+    cli::cli_alert_info("Console log cleared by user.")
+  })
 
   # Log app shutdown
   session$onSessionEnded(function() {

@@ -76,14 +76,17 @@ app_ui <- function(request) {
                   value = "global",
                   fluidRow(
                     column(
-                      12,
+                      6,
                       bslib::tooltip(
                         selectInput("PRIMER_SELECTED", "Primer selected:",
                           choices = get_primer_names(),
                           selected = "12s200pb"
                         ),
                         "PCR primer to use for the analysis"
-                      ),
+                      )
+                    ),
+                    column(
+                      6,
                       tableOutput("primer_info")
                     )
                   )
@@ -275,13 +278,22 @@ app_ui <- function(request) {
             bslib::card(
               bslib::card_header(h5("Script Output", style = "font-weight: bold;")),
               style = "height: 85vh; max-height: 85vh; overflow-y: auto;",
+              fluidRow(
+                column(
+                  6,
+                  br(),
+                  actionButton("clear_log", div(fontawesome::fa("broom"), "Clear Log"), class = "btn-secondary", style = "width: 100%;")
+                ),
+                column(
+                  6,
+                  br(),
+                  uiOutput("download_result_zip_ui")
+                )
+              ),
               verbatimTextOutput("log_output", placeholder = TRUE)
             )
           )
         )
-      ),
-      bslib::nav_panel(
-        "3. Download results", ""
       )
     )
   )
