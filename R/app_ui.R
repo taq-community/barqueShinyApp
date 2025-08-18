@@ -282,7 +282,7 @@ app_ui <- function(request) {
                 column(
                   6,
                   br(),
-                  actionButton("clear_log", div(fontawesome::fa("broom"), "Clear Log"), class = "btn-secondary", style = "width: 100%;")
+                  actionButton("clear_log", div(fontawesome::fa("broom"), "Clear Log"), class = "btn-primary", style = "width: 100%;")
                 ),
                 column(
                   6,

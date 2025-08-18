@@ -24,6 +24,25 @@ app_server <- function(input, output, session) {
     }
   }
 
+  render_download_button <- function() {
+    output$download_result_zip_ui <- renderUI({
+      results_dir <- get_golem_config("bq_results_dir")
+      has_results <- dir.exists(results_dir) && length(list.files(results_dir)) > 0
+      is_running <- !is.null(values$proc) && values$proc$is_alive()
+
+      disabled <- !has_results || is_running
+
+      downloadButton("download_result_zip", "Download Results (.zip)",
+        class = if (disabled) "btn-secondary disabled" else "btn-primary",
+        style = "width: 100%;",
+        disabled = disabled
+      )
+    })
+  }
+
+  clear_barque_folders()
+  render_download_button()
+
   # Reactive values for storing data
   values <- reactiveValues(proc = NULL, log_timer = NULL, script_output = "", file_list = list.files(folder_path, full.names = TRUE), file_buttons = list())
 
@@ -76,20 +95,6 @@ app_server <- function(input, output, session) {
     }
   })
 
-  output$download_result_zip_ui <- renderUI({
-    results_dir <- "inst/barque/12_results"
-    has_results <- dir.exists(results_dir) && length(list.files(results_dir)) > 0
-    is_running <- !is.null(values$proc) && values$proc$is_alive()
-
-    disabled <- !has_results || is_running
-
-    downloadButton("download_result_zip", "Download latest results (.zip)",
-      class = if (disabled) "btn-secondary disabled" else "btn-success",
-      style = "width: 100%;",
-      disabled = disabled
-    )
-  })
-
   output$download_result_zip <- downloadHandler(
     filename = function() {
       paste0("barque_results_", Sys.Date(), ".zip")
@@ -109,10 +114,9 @@ app_server <- function(input, output, session) {
       # Move zip to requested file location
       file.copy(tmp_zip, file)
 
-      # ✅ Delete all files in 12_results
-      unlink(list.files(results_dir, full.names = TRUE), recursive = TRUE, force = TRUE)
+      clear_barque_folders()
 
-      cli::cli_alert_info("Results deleted after download.")
+      cli::cli_alert_info("Clean barque folder after download.")
     },
     contentType = "application/zip"
   )
@@ -121,6 +125,9 @@ app_server <- function(input, output, session) {
   observeEvent(input$execute_script, {
     cli::cli_process_start("Launching script asynchronously...")
     shinyjs::disable("execute_script")
+
+    clear_barque_folders()
+    render_download_button()
 
     values$proc <- processx::process$new(
       command = "./barque",
@@ -141,7 +148,8 @@ app_server <- function(input, output, session) {
       values$log_output <- c(values$log_output, "\n\n⛔ Pipeline annulé par l'utilisateur.")
       cli::cli_alert_danger("Pipeline interrompu.")
       values$proc <- NULL
-      
+      clear_barque_folders()
+      render_download_button()
     }
   })
 
@@ -163,6 +171,7 @@ app_server <- function(input, output, session) {
       cli::cli_process_done()
       shinyjs::enable("execute_script")
       values$proc <- NULL
+      render_download_button()
     }
   })
 
@@ -339,3 +348,4 @@ app_server <- function(input, output, session) {
     cli::cli_alert_info("BARQUE Shiny app session ended at {Sys.time()}")
   })
 }
+
