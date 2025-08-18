@@ -1,5 +1,7 @@
 FROM rocker/shiny:latest
 
+LABEL maintainer="Steve Vissault <steve.vissault@inrs.ca>"
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libcurl4-openssl-dev \
