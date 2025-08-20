@@ -60,9 +60,10 @@ RUN install2.r --error \
 # Install Python dependencies
 RUN pip3 install --no-cache-dir biopython pandas numpy
 
-# install R code
+# Set source code
 COPY . /barqueShinyApp
 WORKDIR /barqueShinyApp
+RUN git submodule update --init --recursive
 
 EXPOSE 3838
 
