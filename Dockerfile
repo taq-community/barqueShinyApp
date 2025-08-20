@@ -1,4 +1,4 @@
-FROM rocker/shiny:latest
+FROM rocker/r-ver:4.3.3
 
 LABEL maintainer="Steve Vissault <steve.vissault@inrs.ca>"
 
@@ -58,15 +58,13 @@ RUN install2.r --error \
     usethis
 
 # Install Python dependencies
-RUN pip3 install --break-system-packages --no-cache-dir biopython pandas numpy
+RUN pip3 install --no-cache-dir biopython pandas numpy
 
-# Remove demo apps
-RUN rm -rf /srv/shiny-server/*
+# install R code
+COPY . /barqueShinyApp
+WORKDIR /barqueShinyApp
 
-# Copy your app
-COPY --chown=shiny:shiny . /srv/shiny-server
-
-RUN mkdir -p /srv/shiny-server/app_cache/sass
+EXPOSE 3838
 
 # Start Shiny Server
-CMD ["/bin/shiny-server"]
+CMD ["Rscript", "app.R"]

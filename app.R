@@ -3,5 +3,5 @@
 # Or use the blue button on top of this file
 
 pkgload::load_all(export_all = FALSE,helpers = FALSE,attach_testthat = FALSE)
-options("golem.app.prod" = TRUE, "shiny.port" = 3838)
+options("golem.app.prod" = TRUE, "shiny.port" = 3838, "shiny.server" = "0.0.0.0")
 barqueShinyApp::run_app() # add parameters here (if any)
