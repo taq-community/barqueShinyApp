@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     wget \
     less \
+    bc \
     && rm -rf /var/lib/apt/lists/*
 
 # Install FLASH (v1.2.11+)
