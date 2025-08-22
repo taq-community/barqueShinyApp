@@ -133,9 +133,11 @@ app_server <- function(input, output, session) {
       command = "./barque",
       args = c("02_info/barque_config.sh"),
       wd = "inst/barque",
-      stdout = "|",  # pipe la sortie
+      stdout = "|", # pipe la sortie
       stderr = "2>&1"
     )
+    
+    cli::cli_alert_info("Running process with { values$proc$get_wd() }")
 
     # Timer pour lire la sortie toutes les secondes
     values$log_timer <- reactiveTimer(1000)
